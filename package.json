@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "start": "node node_modules/react-native/local-cli/cli.js start",
-    "test": "jest"
+    "test": "jest",
+    "runA": "react-native run-android",
+    "devA": "adb shell input keyevent 82"
   },
   "dependencies": {
+    "lodash": "^4.17.11",
     "nintendo-switch-eshop": "^2.1.1",
     "react": "16.6.3",
     "react-native": "0.58.6",

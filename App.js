@@ -25,11 +25,12 @@ import FeatherIcons from 'react-native-vector-icons/Feather';
 
 var Datastore = require('react-native-local-mongodb');
 global.gamesDB = new Datastore({ filename: 'games', autoload: true });
+global.gamePricesDB = new Datastore({ filename: 'gamePrices', autoload: true });
 
 const TabNavigator = createBottomTabNavigator(
 	{
 		"Promoções": HomePage,
-		"Settings": ConfigsPage
+		"Configurações": ConfigsPage
 	},
 	{
 		defaultNavigationOptions: ({ navigation }) => ({

@@ -3,11 +3,16 @@ import { Platform, StyleSheet, Text, View, Button } from "react-native";
 
 import Spinner from "react-native-loading-spinner-overlay";
 
+import _ from 'lodash';
+
 export default class ConfigsPage extends Component {
+	
 	constructor(props) {
 		super(props);
 		this.state = { spinner: false };
-		this.updateGames = this.updateGames.bind(this);
+		this.updateEverything = this.updateEverything.bind(this);
+		this.updatePrices = this.updatePrices.bind(this);
+		this.fetchPrices = this.fetchPrices.bind(this);
 	}
 
 	render() {
@@ -18,19 +23,31 @@ export default class ConfigsPage extends Component {
 				textContent={"Loading..."}
 				textStyle={styles.spinnerTextStyle}
 			/>
-			<Text style={styles.welcome}>Welcome to React Native!</Text>
-			<Button
-				onPress={this.updateGames}
-				title="Update games"
-				color="#841584"
-				accessibilityLabel="Download Games List"
-			/>
-			<Button
-				onPress={this.queryGames}
-				title="Query Games"
-				color="#841584"
-				accessibilityLabel="Query Games List"
-			/>
+			<Text style={styles.welcome}>Atualiza os jogos/preços com os botões abaixo</Text>
+			<View style={{ margin: 10 }}>
+				<Button
+					onPress={this.updateEverything}
+					title="Atualizar Jogos e Preços"
+					color="#841584"
+					accessibilityLabel="Download Games and Prices"
+				/>
+			</View>
+			<View style={{ margin: 10 }}>
+				<Button
+					onPress={this.updatePrices}
+					title="Atualizar Preços"
+					color="#841584"
+					accessibilityLabel="Download Prices List"
+				/>
+			</View>
+			<View style={{ margin: 10 }}>
+				{/* <Button
+					onPress={this.queryGames}
+					title="Query Games"
+					color="#841584"
+					accessibilityLabel="Query Games List"
+				/> */}
+			</View>
 		</View>
 		);
 	}
@@ -55,7 +72,7 @@ export default class ConfigsPage extends Component {
 			fetch("https://searching.nintendo-europe.com/pt/select?q=*&fq=type:GAME%20AND%20((playable_on_txt:%22HAC%22)%20AND%20(dates_released_dts:%5B*%20TO%20NOW%5D%20AND%20nsuid_txt:*))%20AND%20sorting_title:*%20AND%20*:*&sort=score%20desc,%20date_from%20desc&start=0&rows=99999&wt=json&bf=linear(ms(priority,NOW%2FHOUR),1.1e-11,0)")
 			.then((response) => response.json())
 			.then((responseJson) => {
-				console.log("got games -> ", responseJson.response.docs);
+				console.log("got games from API -> ", responseJson.response.docs);
 				resolve(responseJson.response.docs);
 			})
 			.catch((error) => {
@@ -65,7 +82,7 @@ export default class ConfigsPage extends Component {
 		});
 	}
 
-	fetchPrices(nsuIDs){
+	get50Prices(nsuIDs){
 		return new Promise((resolve, reject) => {
 			fetch("https://api.ec.nintendo.com/v1/price?country=PT&lang=en&ids=" + nsuIDs.join(','))
 			.then((response) => response.json())
@@ -75,35 +92,65 @@ export default class ConfigsPage extends Component {
 			})
 			.catch((error) => {
 				console.log("err getting prices -> ", error);
-				reject(error);
+				reject(false);
 			});
+		});
+	}
+
+	fetchPrices(games){
+		return new Promise((resolve, reject) => {
+			let hasError = false;
+			let errChunks = [];
+			let finalPrices = [];
+			let chunkedGames = _.chunk(games, 50);
+			let finalFunc = _.after(chunkedGames.length, function() {
+				if(hasError == true){
+					console.log('done getting prices with error!');
+					reject();
+				} else {
+					console.log('done getting prices -> ', finalPrices);
+					resolve(finalPrices);
+				}
+			});
+			for (const chunk of chunkedGames) {
+				let pricechunk = chunk.map((val) => { return val.nsuid[0]});
+				this.get50Prices(pricechunk).then(
+					(res) => {
+						let pricesReg = res.map((val) => {
+							let tmp_id = _.find(chunk, function(o) { if(o.nsuid[0] == val.title_id) return true; });
+							let tmpVal = { priceInf: val, game_id: tmp_id._id };
+							return tmpVal;
+						});
+						finalPrices = _.union(finalPrices, pricesReg)
+						// finalPrices.push(pricesReg);
+						finalFunc();
+					},
+					(err) => {
+						finalFunc();
+						hasError = true;
+						errChunks.push(chunk);
+					}
+				);;
+			}
 		});
 	}
 
 	insertGames(games){
 		return new Promise((resolve, reject) => {
-			global.gamesDB.removeAsync({}, { multi: true }).then(
+			global.gamesDB.insertAsync(games).then(
 				(res) => {
-					global.gamesDB.insertAsync(games).then(
-						(res) => {
-							console.log(res.length + " games inserted");
-							resolve();
-						},
-						(errInsert) => {
-							console.log("error inserting games -> ", errInsert);
-							reject(errInsert);
-						}
-					);
+					console.log(res.length + " games inserted");
+					resolve();
 				},
-				errRemove => {
-					console.log("error removing games -> ", errRemove);
-					reject(errRemove);
+				(errInsert) => {
+					console.log("error inserting games -> ", errInsert);
+					reject(errInsert);
 				}
 			);
 		});
 	}
 
-  	updateGames() {
+	updateEverything() {
 		this.setState({
 			spinner: true
 		});
@@ -111,7 +158,8 @@ export default class ConfigsPage extends Component {
 		this.fetchGames()
 		.then(
 			(games) => {
-				const filterGames = games.map((val) => {
+				this.removeEverything();
+				const filterGames = games.map((val, index) => {
 					return { 
 						title: val.title,
 						fsID: val.fs_id,
@@ -121,15 +169,13 @@ export default class ConfigsPage extends Component {
 						isOnSale: val.price_has_discount_b,
 						salePercentage: val.price_discount_percentage_f,
 						releaseDates: val.dates_released_dts,
-						lastUpdated: new Date(),
+						topScore: index,
+						lastUpdated: new Date()
 					}
 				});
-
 				this.insertGames(filterGames).then(
 					(res) => {
-						this.setState({
-							spinner: false
-						});
+						this.updatePrices();
 					},
 					(err) => {
 						this.setState({
@@ -137,21 +183,6 @@ export default class ConfigsPage extends Component {
 						});
 					}
 				);
-				// );
-				// const nsuids = games.map((val) => {
-				// 	return val.nsuid_txt[0];
-				// });
-				// this.fetchPrices(nsuids)
-				// .then(
-				// 	(res) => {
-						
-				// 	},
-				// 	(err) => {
-				// 		this.setState({
-				// 			spinner: false
-				// 		});
-				// 	}
-				// );
 			},
 			(err) => {
 				this.setState({
@@ -161,9 +192,70 @@ export default class ConfigsPage extends Component {
 		);
 	}
 
+	removeEverything(){
+		global.gamesDB.remove({}, { multi: true });
+		global.gamePricesDB.remove({}, { multi: true });
+	}
+
+	updatePrices(){
+		this.setState({
+			spinner: true
+		});
+		this.queryGames().then(
+			(games) => {
+				this.fetchPrices(games).then(
+					(res) => {
+						this.insertPricesBD(res)
+						.then(
+							(resFinal) => {
+								this.setState({
+									spinner: false
+								});
+							},
+							(err) => {
+								this.setState({
+									spinner: false
+								});
+							}
+						);
+					},
+					(err) => {
+						this.setState({
+							spinner: false
+						});
+					}
+				);
+			},
+			(err) => {
+				this.setState({
+					spinner: false
+				});
+			}
+		);
+	}
+
+	insertPricesBD(prices){
+		return new Promise((resolve, reject) => {
+			prices = prices.map((val) => { 
+				val.created_date = new Date();
+				return val;
+			});
+			global.gamePricesDB.insertAsync(prices).then(
+				(res) => {
+					console.log(res.length + " prices inserted");
+					resolve();
+				},
+				(errInsert) => {
+					console.log("error inserting prices -> ", errInsert);
+					reject(errInsert);
+				}
+			);
+		});
+	}
+
 	queryGames(){
 		return new Promise((resolve, reject) => {
-			global.gamesDB.find({}, function (err, docs) {
+			global.gamesDB.find({}).sort({ topScore: 1 }).exec(function (err, docs) {
 				if(err){
 					console.log("error finding games -> ", err);
 					reject(err);
