@@ -1,13 +1,5 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- * @flow
- * @lint-ignore-every XPLATJSCOPYRIGHT1
- */
 if(__DEV__) {
-	import('./reactronconfig').then(() => console.log('Reactotron Configured'))
+	import("./reactronconfig").then(() => console.log('Reactotron Configured'))
 }
 
 import React, { Component } from "react";
@@ -15,8 +7,8 @@ import { Platform, StyleSheet, Text, View, Button } from "react-native";
 
 import { createBottomTabNavigator, createStackNavigator, createAppContainer } from 'react-navigation';
 
-import HomePage from "./src/pages/home";
-import ConfigsPage from "./src/pages/configs";
+import HomePage from "./pages/home";
+import ConfigsPage from "./pages/configs";
 
 import Spinner from "react-native-loading-spinner-overlay";
 
